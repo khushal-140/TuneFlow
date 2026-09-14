@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>TuneFlow</title>
+  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="logged-out">
+  <div id="app">
+    <aside id="sidebar" class="chrome"></aside>
+    <div id="main" class="chrome">
+      <header id="topbar"></header>
+      <main id="view"></main>
+    </div>
+    <footer id="player" class="hidden">
+      <div id="embed-panel" class="hidden">
+        <div class="embed-head">
+          <span id="embed-note"></span>
+          <button id="embed-close" class="icon-btn" title="Close player"></button>
+        </div>
+        <div id="embed-frame"></div>
+      </div>
+      <div class="player-inner">
+        <div class="p-left">
+          <div class="p-cover" id="p-cover"></div>
+          <div class="p-meta">
+            <div id="p-title" class="p-title">Nothing playing</div>
+            <div id="p-artist" class="p-sub muted">Pick a track to start listening</div>
+          </div>
+          <button id="p-like" class="icon-btn heart" title="Like"></button>
+        </div>
+        <div class="p-center">
+          <div class="p-controls">
+            <button id="p-shuffle" class="icon-btn sm" title="Shuffle"></button>
+            <button id="p-prev" class="icon-btn" title="Previous"></button>
+            <button id="p-play" class="play-btn" title="Play / pause"></button>
+            <button id="p-next" class="icon-btn" title="Next"></button>
+            <button id="p-repeat" class="icon-btn sm" title="Repeat"></button>
+          </div>
+          <div class="p-progress">
+            <span id="p-cur" class="tiny">0:00</span>
+            <input id="p-seek" type="range" min="0" max="1000" value="0">
+            <span id="p-dur" class="tiny">0:00</span>
+          </div>
+        </div>
+        <div class="p-right">
+          <span id="p-source" class="source-chip hidden"></span>
+          <button id="p-mute" class="icon-btn sm" title="Mute"></button>
+          <input id="p-vol" type="range" min="0" max="100" value="85">
+        </div>
+      </div>
+    </footer>
+  </div>
+  <div id="modal-root"></div>
+  <div id="popover-root"></div>
+  <div id="toast-root"></div>
+  <audio id="audio" preload="metadata"></audio>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
