@@ -25,6 +25,41 @@
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Roboto, Inter, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* ---------- light theme ---------- */
+html.light {
+  --bg0: #f4f4f9;
+  --bg1: #ffffff;
+  --bg2: #eef0f6;
+  --bg3: #e3e5ef;
+  --bg4: #d7dae6;
+  --text: #17171f;
+  --muted: #4e4e63;
+  --faint: #85859c;
+  --danger: #dc2626;
+  --ok: #16a34a;
+  --line: rgba(22, 22, 45, 0.09);
+  --line-strong: rgba(22, 22, 45, 0.16);
+  --shadow: 0 12px 34px rgba(35, 35, 80, 0.14);
+  color-scheme: light;
+}
+html.light ::-webkit-scrollbar-thumb { background: #c7c9d6; }
+html.light ::-webkit-scrollbar-thumb:hover { background: #b3b6c8; }
+html.light #topbar { background: rgba(255, 255, 255, 0.82); }
+html.light #player { background: rgba(255, 255, 255, 0.93); }
+html.light input[type="range"] {
+  background: linear-gradient(to right, var(--accent) 0%, var(--accent2) 0%, #d7d9e4 0%);
+}
+html.light .src-badge { color: #7c3aed; background: rgba(139, 92, 246, 0.12); }
+html.light .chip.taste { color: #7c3aed; }
+html.light .s-reason { color: #7c3aed; }
+html.light .song-row.playing .s-title { color: #7c3aed; }
+html.light #main-nav a.nav-ai { color: #7c3aed; }
+html.light .quick.accent { color: #6d28d9; }
+html.light .auth-card { background: rgba(255, 255, 255, 0.93); }
+html.light .toast.error { color: #b91c1c; }
+html.light .sc-heart { background: rgba(255, 255, 255, 0.78); }
+html.light .pop-header { background: var(--bg3); }
+
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 
@@ -90,17 +125,22 @@ body.logged-out #view { overflow: visible; }
   flex-direction: column;
   padding: 18px 14px 12px;
   gap: 14px;
-  overflow-y: auto;
+  overflow: hidden; /* sections manage their own scrolling; account stays pinned */
 }
 
 .brand {
   display: flex; align-items: center; gap: 10px;
   font-size: 19px; font-weight: 800; letter-spacing: -0.02em;
   padding: 2px 8px;
+  flex: 0 0 auto;
 }
 .brand.big { font-size: 26px; padding: 0; justify-content: flex-start; }
 
-#main-nav { display: flex; flex-direction: column; gap: 2px; }
+#main-nav {
+  display: flex; flex-direction: column; gap: 2px;
+  flex: 0 0 auto;        /* primary nav never shrinks or hides items */
+  padding-right: 2px;
+}
 #main-nav a {
   display: flex; align-items: center; gap: 12px;
   padding: 9px 12px; border-radius: 10px;
@@ -113,10 +153,37 @@ body.logged-out #view { overflow: visible; }
 #main-nav a.nav-ai { color: #c4b5fd; }
 #main-nav a.nav-ai:hover { background: var(--grad-soft); }
 
-.side-actions { display: flex; flex-direction: column; gap: 8px; }
+.side-actions { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
 
-.side-playlists { flex: 1; min-height: 60px; display: flex; flex-direction: column; }
-.side-head { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--faint); font-weight: 700; padding: 4px 12px 6px; }
+.side-playlists {
+  flex: 1 1 auto;
+  min-height: 0;          /* lets it shrink so the account card stays visible */
+  overflow-y: auto;       /* only the playlist area scrolls */
+  display: flex;
+  flex-direction: column;
+  padding: 2px 2px 6px;
+}
+.side-head {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--faint); font-weight: 700; padding: 4px 12px 6px;
+  position: sticky; top: -2px; z-index: 1;
+  background: var(--bg1); /* stays readable while playlists scroll under it */
+}
+
+/* short windows: tighten the sidebar so nav + account card still fit */
+@media (max-height: 760px) {
+  #sidebar { padding: 12px 12px 10px; gap: 10px; }
+  #main-nav a { padding: 7px 12px; }
+  .side-actions { gap: 6px; }
+  .side-user { padding: 8px 12px; }
+}
+/* very short windows: icon-only action buttons so the nav stays complete */
+@media (max-height: 620px) {
+  .side-actions { flex-direction: row; }
+  .side-actions .btn { flex: 1; justify-content: center; padding: 9px 0; }
+  .side-actions .btn span { display: none; }
+  #main-nav { flex: 0 1 auto; min-height: 0; overflow-y: auto; } /* last resort */
+}
 #side-playlists { display: flex; flex-direction: column; gap: 1px; }
 #side-playlists a {
   display: flex; align-items: center; gap: 10px;
@@ -126,17 +193,38 @@ body.logged-out #view { overflow: visible; }
 #side-playlists a:hover { color: var(--text); background: var(--bg2); }
 #side-playlists a svg { flex: 0 0 auto; width: 16px; height: 16px; color: var(--faint); }
 
-.side-user {
-  display: flex; align-items: center; gap: 10px;
-  border-top: 1px solid var(--line); padding: 12px 6px 2px;
-}
 .avatar {
   width: 34px; height: 34px; border-radius: 50%;
-  background: var(--grad); display: grid; place-items: center;
+  background: var(--grad); color: #fff; display: grid; place-items: center;
   font-weight: 800; font-size: 15px; flex: 0 0 auto;
 }
-.su-meta { min-width: 0; flex: 1; }
-.su-name { font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-user {
+  display: flex; align-items: center; gap: 11px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  flex: 0 0 auto;         /* pinned to the bottom, never scrolls away */
+  transition: background .15s, border-color .15s, transform .12s, box-shadow .15s;
+}
+.side-user:hover, .side-user:focus-visible {
+  background: var(--bg3);
+  border-color: rgba(139, 92, 246, .45);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+}
+.side-user .avatar {
+  width: 38px; height: 38px; font-size: 16px;
+  box-shadow: 0 0 0 2px var(--bg2), 0 0 0 3.5px rgba(139, 92, 246, .55);
+}
+.su-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.su-name { font-weight: 750; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.su-mail { color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.su-chev { color: var(--faint); display: grid; place-items: center; transition: color .15s, transform .15s; }
+.su-chev svg { width: 16px; height: 16px; }
+.side-user:hover .su-chev { color: var(--accent2); transform: translateY(1px); }
 
 /* ---------- topbar ---------- */
 #topbar {
@@ -210,6 +298,8 @@ body.logged-out #view { overflow: visible; }
 .icon-btn.lg { width: 42px; height: 42px; }
 .icon-btn.active { color: var(--accent2); }
 .icon-btn.heart.active { color: var(--accent2); }
+.icon-btn.skip-btn svg { width: 23px; height: 23px; }
+.icon-btn.skip-btn:hover { color: var(--accent2); }
 
 /* ---------- forms ---------- */
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
@@ -640,6 +730,21 @@ input[type="range"]:disabled { opacity: .35; cursor: default; }
 .pop-item svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--muted); }
 .pop-item.danger svg { color: var(--danger); }
 
+/* account popover header */
+.pop-header {
+  display: flex; align-items: center; gap: 12px;
+  margin: -6px -6px 6px;
+  padding: 13px 12px 12px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 12px 12px 0 0;
+  background: var(--bg3);
+}
+.pop-header .avatar { width: 42px; height: 42px; font-size: 17px; }
+.pop-h-meta { min-width: 0; }
+.pop-h-name { font-weight: 800; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop-h-mail { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop-h-since { font-size: 10.5px; color: var(--faint); margin-top: 2px; }
+
 /* ---------- pick lists (add to playlist) ---------- */
 .pick-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; margin: 6px 0; }
 .pick-list.tall { max-height: 380px; }
@@ -676,6 +781,9 @@ input[type="range"]:disabled { opacity: .35; cursor: default; }
 .up-name svg { color: var(--accent2); }
 .progress { height: 5px; border-radius: 4px; background: var(--bg4); overflow: hidden; }
 .progress-bar { height: 100%; background: var(--grad); border-radius: 4px; transition: width .15s; }
+.progress.big { height: 9px; margin: 12px 0 10px; }
+.cv-stage { font-variant-numeric: tabular-nums; }
+.import-card.converting .ic-main { width: 100%; }
 .up-status { margin-top: 7px; }
 
 .up-card {

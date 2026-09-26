@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local data & generated media (personal / regenerable — never publish)
+instance/
+server.log
+static/uploads/
+static/covers/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db

@@ -9,6 +9,7 @@ const els = {
   bar: $('player'), panel: $('embed-panel'), frame: $('embed-frame'),
   note: $('embed-note'), cover: $('p-cover'), title: $('p-title'), artist: $('p-artist'),
   like: $('p-like'), play: $('p-play'), prev: $('p-prev'), next: $('p-next'),
+  back10: $('p-back10'), fwd10: $('p-fwd10'),
   shuffle: $('p-shuffle'), repeat: $('p-repeat'), seek: $('p-seek'),
   cur: $('p-cur'), dur: $('p-dur'), vol: $('p-vol'), mute: $('p-mute'), source: $('p-source'),
 };
@@ -24,6 +25,53 @@ const state = {
 };
 
 function song() { return state.queue[state.order[state.pos]] || null; }
+
+/* ---------- YouTube IFrame API: lets skip/seek work inside official embeds ---------- */
+const yt = { player: null, ready: false, apiPromise: null };
+
+function loadYtApi() {
+  if (yt.apiPromise) return yt.apiPromise;
+  yt.apiPromise = new Promise((resolve) => {
+    if (window.YT && window.YT.Player) { resolve(window.YT); return; }
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { if (typeof prev === 'function') prev(); resolve(window.YT); };
+    const sc = document.createElement('script');
+    sc.src = 'https://www.youtube.com/iframe_api';
+    sc.onerror = () => resolve(null);
+    document.head.appendChild(sc);
+    setTimeout(() => resolve(window.YT && window.YT.Player ? window.YT : null), 8000);
+  });
+  return yt.apiPromise;
+}
+
+function destroyYtPlayer() {
+  if (yt.player) {
+    try { yt.player.destroy(); } catch { /* ignore */ }
+    yt.player = null;
+  }
+  yt.ready = false;
+}
+
+function onYtState(e) {
+  const YT = window.YT;
+  const s = song();
+  if (!YT || !s) return;
+  if (e.data === YT.PlayerState.PLAYING) {
+    state.playing = true;
+    setPlayIcon(true);
+    if (!state.playRecorded) {
+      state.playRecorded = true;
+      api(`/api/songs/${s.id}/play`, { method: 'POST' }).catch(() => {});
+    }
+    announce();
+  } else if (e.data === YT.PlayerState.PAUSED) {
+    state.playing = false;
+    setPlayIcon(false);
+    announce();
+  } else if (e.data === YT.PlayerState.ENDED) {
+    Player.next(false);
+  }
+}
 
 function rebuildOrder(currentIdx) {
   const idxs = state.queue.map((_, i) => i);
@@ -54,7 +102,7 @@ function coverHtml(s) {
   return `<div class="cover-grad" style="background:linear-gradient(135deg,hsl(${hue},60%,46%),hsl(${(hue + 55) % 360},72%,24%))"><span>${esc((s.title || '?').slice(0, 1).toUpperCase())}</span></div>`;
 }
 
-const SOURCE_LABEL = { upload: 'File', download: 'Download', youtube: 'YouTube', soundcloud: 'SoundCloud' };
+const SOURCE_LABEL = { upload: 'File', download: 'Download', youtube: 'YouTube', soundcloud: 'SoundCloud', ytdownload: 'YT MP3' };
 
 function updateBar(s) {
   els.cover.innerHTML = coverHtml(s);
@@ -87,26 +135,83 @@ function announce() {
 
 /* ---------- playback ---------- */
 function clearEmbed() {
+  destroyYtPlayer();
   els.frame.innerHTML = '';
   els.panel.classList.add('hidden');
+}
+
+function skipEmbed(delta, silent = false) {
+  if (yt.player) {
+    try {
+      const cur = yt.player.getCurrentTime() || 0;
+      const dur = yt.player.getDuration() || 0;
+      yt.player.seekTo(Math.min(Math.max(0, cur + delta), dur > 0 ? dur : cur + delta), true);
+      return;
+    } catch { /* fall through */ }
+  }
+  if (!silent) toast('Use the official embed\u2019s own controls to seek on this track.');
 }
 
 function playEmbed(s) {
   audio.pause();
   audio.removeAttribute('src');
-  let src = s.embed_url;
-  if (/youtube/.test(src) && !/autoplay=1/.test(src)) src += (src.includes('?') ? '&' : '?') + 'autoplay=1';
-  if (/soundcloud/.test(src) && !/auto_play=true/.test(src)) src += (src.includes('?') ? '&' : '?') + 'auto_play=true';
-  const h = /soundcloud/.test(src) ? 166 : 290;
-  els.frame.innerHTML = `<iframe src="${esc(src)}" style="height:${h}px" allow="autoplay; encrypted-media; clipboard-write" frameborder="0" allowfullscreen></iframe>`;
-  els.note.innerHTML = `${esc(s.title)} — playing via the official ${s.source === 'youtube' ? 'YouTube' : 'SoundCloud'} embed. If it doesn't start, press play inside the player.`;
-  els.panel.classList.remove('hidden');
+  destroyYtPlayer();
   state.playing = true;
-  state.playRecorded = true;
-  api(`/api/songs/${s.id}/play`, { method: 'POST' }).catch(() => {});
+  state.playRecorded = false;
   updateBar(s);
   setPlayIcon(true);
   announce();
+
+  if (s.source === 'youtube') {
+    const vid = (/embed\/([A-Za-z0-9_-]{11})/.exec(s.embed_url || '') || [])[1];
+    els.note.innerHTML = `${esc(s.title)} — playing via the official YouTube embed. If it doesn't start, press play inside the player.`;
+    els.panel.classList.remove('hidden');
+    if (!vid) { // unexpected embed URL — fall back to a plain iframe
+      els.frame.innerHTML = `<iframe src="${esc(s.embed_url)}" style="height:290px" allow="autoplay; encrypted-media; clipboard-write" frameborder="0" allowfullscreen></iframe>`;
+      state.playRecorded = true;
+      api(`/api/songs/${s.id}/play`, { method: 'POST' }).catch(() => {});
+      return;
+    }
+    const target = document.createElement('div');
+    els.frame.innerHTML = '';
+    els.frame.appendChild(target);
+    loadYtApi().then((YT) => {
+      if (!YT || !target.isConnected) { // API unavailable or the track changed meanwhile
+        if (target.isConnected && !yt.player) {
+          els.frame.innerHTML = `<iframe src="${esc(s.embed_url)}" style="height:290px" allow="autoplay; encrypted-media; clipboard-write" frameborder="0" allowfullscreen></iframe>`;
+          state.playRecorded = true;
+          api(`/api/songs/${s.id}/play`, { method: 'POST' }).catch(() => {});
+        }
+        return;
+      }
+      yt.player = new YT.Player(target, {
+        width: '100%',
+        height: 290,
+        videoId: vid,
+        playerVars: { autoplay: 1, rel: 0 },
+        events: {
+          onReady: () => {
+            yt.ready = true;
+            try {
+              const d = yt.player.getDuration();
+              if (d) els.dur.textContent = fmtDur(d);
+            } catch { /* ignore */ }
+          },
+          onStateChange: onYtState,
+        },
+      });
+    });
+    return;
+  }
+
+  // SoundCloud — official widget iframe (use the widget's own controls to seek)
+  let src = s.embed_url;
+  if (!/auto_play=true/.test(src)) src += (src.includes('?') ? '&' : '?') + 'auto_play=true';
+  els.frame.innerHTML = `<iframe src="${esc(src)}" style="height:166px" allow="autoplay; clipboard-write" frameborder="0" allowfullscreen></iframe>`;
+  els.note.innerHTML = `${esc(s.title)} — playing via the official SoundCloud embed. If it doesn't start, press play inside the player.`;
+  els.panel.classList.remove('hidden');
+  state.playRecorded = true;
+  api(`/api/songs/${s.id}/play`, { method: 'POST' }).catch(() => {});
 }
 
 function playLocal(s) {
@@ -182,6 +287,8 @@ export const Player = {
     });
 
     els.play.onclick = () => Player.toggle();
+    els.back10.onclick = () => Player.skip(-10);
+    els.fwd10.onclick = () => Player.skip(10);
     els.prev.onclick = () => Player.prev();
     els.next.onclick = () => Player.next(true);
     els.shuffle.onclick = () => {
@@ -219,17 +326,29 @@ export const Player = {
     $('embed-close').innerHTML = I.x;
     $('embed-close').onclick = () => { clearEmbed(); };
 
+    els.shuffle.innerHTML = I.shuffle;
+    els.prev.innerHTML = I.prev;
+    els.next.innerHTML = I.next;
+    els.back10.innerHTML = I.back10;
+    els.fwd10.innerHTML = I.fwd10;
+
     iconBtnState();
     setPlayIcon(false);
     els.mute.innerHTML = I.vol;
 
-    // space bar play/pause (when not typing)
+    // space = play/pause, ←/→ = skip 10s (when not typing)
     document.addEventListener('keydown', (e) => {
-      if (e.code !== 'Space') return;
       const t = e.target;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      e.preventDefault();
-      Player.toggle();
+      const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (e.code === 'Space' && !typing) {
+        e.preventDefault();
+        Player.toggle();
+      }
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !typing) {
+        if (!song()) return;
+        e.preventDefault();
+        Player.skip(e.key === 'ArrowLeft' ? -10 : 10, true);
+      }
     });
 
     if ('mediaSession' in navigator) {
@@ -261,6 +380,13 @@ export const Player = {
     const s = song();
     if (!s) return;
     if (s.embed_url) {
+      if (yt.player && yt.ready) {
+        try {
+          if (yt.player.getPlayerState() === window.YT.PlayerState.PLAYING) yt.player.pauseVideo();
+          else yt.player.playVideo();
+          return;
+        } catch { /* fall through */ }
+      }
       toast('This one plays in the official embed — use its own controls.');
       return;
     }
@@ -294,6 +420,17 @@ export const Player = {
     if (!s.embed_url && audio.currentTime > 3) { audio.currentTime = 0; return; }
     if (state.pos > 0) { state.pos -= 1; loadAndPlay(); }
     else if (!s.embed_url) audio.currentTime = 0;
+  },
+
+  /* ±10 second skip; works on local files and (via the IFrame API) YouTube embeds. */
+  skip(delta, silent = false) {
+    const s = song();
+    if (!s) return;
+    if (s.embed_url) { skipEmbed(delta, silent); return; }
+    if (!audio.src || !audio.duration || !isFinite(audio.duration)) return;
+    audio.currentTime = Math.min(Math.max(0, audio.currentTime + delta), audio.duration);
+    els.cur.textContent = fmtDur(audio.currentTime);
+    els.seek.value = Math.round((audio.currentTime / audio.duration) * 1000);
   },
 
   currentSong: song,

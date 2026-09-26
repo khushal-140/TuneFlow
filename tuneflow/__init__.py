@@ -39,12 +39,14 @@ def create_app():
     from .uploads import uploads_bp
     from .playlists import playlists_bp
     from .ai import ai_bp
+    from .converter import converter_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(library_bp)
     app.register_blueprint(uploads_bp)
     app.register_blueprint(playlists_bp)
     app.register_blueprint(ai_bp)
+    app.register_blueprint(converter_bp)
 
     @app.get('/')
     def index():

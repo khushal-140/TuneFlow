@@ -1,6 +1,6 @@
 /* App bootstrap: auth state, chrome (sidebar/topbar), route registration. */
 import { api } from './api.js';
-import { esc, toast } from './util.js';
+import { esc, toast, openMenu } from './util.js';
 import { I } from './icons.js';
 import { register, render } from './router.js';
 import { Player } from './player.js';
@@ -12,6 +12,7 @@ import { viewPlaylists, viewPlaylistDetail } from './views/playlists.js';
 import { viewLiked, viewHistory } from './views/collections.js';
 import { viewAssistant } from './views/assistant.js';
 import { viewUpload, viewImport } from './views/add.js';
+import { viewConverter } from './views/converter.js';
 
 let user = null;
 
@@ -25,6 +26,7 @@ register('history', viewHistory);
 register('assistant', viewAssistant);
 register('upload', viewUpload);
 register('import', viewImport);
+register('converter', viewConverter);
 
 /* ---------- chrome ---------- */
 function renderSidebar() {
@@ -38,6 +40,7 @@ function renderSidebar() {
       <a href="#/liked">${I.heart}<span>Liked songs</span></a>
       <a href="#/history">${I.history}<span>History</span></a>
       <a href="#/assistant" class="nav-ai">${I.sparkles}<span>AI Assistant</span></a>
+      <a href="#/converter" class="nav-cv">${I.download}<span>MP3 Converter</span></a>
     </nav>
     <div class="side-actions">
       <a href="#/upload" class="btn btn-grad sm">${I.upload}<span>Upload</span></a>
@@ -47,16 +50,45 @@ function renderSidebar() {
       <div class="side-head">Your playlists</div>
       <div id="side-playlists"></div>
     </div>
-    <div class="side-user">
+    <div class="side-user" id="account-chip" role="button" tabindex="0" title="Account">
       <div class="avatar">${esc((user?.username || '?')[0].toUpperCase())}</div>
-      <div class="su-meta"><div class="su-name">${esc(user?.username || '')}</div><div class="muted tiny">Personal server</div></div>
-      <button id="logout-btn" class="icon-btn" title="Log out">${I.logout}</button>
+      <div class="su-meta">
+        <div class="su-name">${esc(user?.username || '')}</div>
+        <div class="su-mail">${esc(user?.email || 'Personal server')}</div>
+      </div>
+      <span class="su-chev">${I.chevron}</span>
     </div>`;
   renderSidebarPlaylists();
-  sb.querySelector('#logout-btn').onclick = async () => {
-    try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
-    location.reload();
-  };
+  const chip = sb.querySelector('#account-chip');
+  chip.onclick = () => openAccountMenu(chip);
+  chip.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAccountMenu(chip); }
+  });
+}
+
+function openAccountMenu(anchor) {
+  const created = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+    : null;
+  openMenu(anchor, [
+    {
+      label: 'Log out', icon: I.logout,
+      onClick: async () => {
+        try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+        location.reload();
+      },
+    },
+  ], {
+    header: `
+      <div class="pop-header">
+        <div class="avatar">${esc((user?.username || '?')[0].toUpperCase())}</div>
+        <div class="pop-h-meta">
+          <div class="pop-h-name">${esc(user?.username || '')}</div>
+          <div class="pop-h-mail">${esc(user?.email || 'Personal server')}</div>
+          ${created ? `<div class="pop-h-since">Listening since ${created}</div>` : ''}
+        </div>
+      </div>`,
+  });
 }
 
 async function renderSidebarPlaylists() {
@@ -76,9 +108,24 @@ function renderTopbar() {
     <button id="sb-toggle" class="icon-btn only-mobile">${I.menu}</button>
     <div class="search-box top">${I.search}<input id="global-q" type="search" placeholder="Search your library…"></div>
     <div class="top-right">
+      <button id="theme-toggle" class="icon-btn" title="Switch theme"></button>
       <span class="chip tiny-chip">${I.shield}<span>Self-hosted</span></span>
     </div>`;
   const input = tb.querySelector('#global-q');
+
+  const themeBtn = tb.querySelector('#theme-toggle');
+  const syncThemeBtn = () => {
+    const light = document.documentElement.classList.contains('light');
+    themeBtn.innerHTML = light ? I.moon : I.sun;
+    themeBtn.title = light ? 'Switch to dark mode' : 'Switch to light mode';
+  };
+  syncThemeBtn();
+  themeBtn.onclick = () => {
+    const light = document.documentElement.classList.toggle('light');
+    try { localStorage.setItem('tf-theme', light ? 'light' : 'dark'); } catch { /* ignore */ }
+    syncThemeBtn();
+    toast(light ? 'Light mode on' : 'Dark mode on');
+  };
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const q = input.value.trim();

@@ -3,8 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="dark light">
   <title>TuneFlow</title>
+  <script>
+    /* apply saved theme before first paint to avoid a flash */
+    try {
+      if (localStorage.getItem('tf-theme') === 'light') {
+        document.documentElement.classList.add('light');
+      }
+    } catch (e) {}
+  </script>
   <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -36,7 +44,9 @@
           <div class="p-controls">
             <button id="p-shuffle" class="icon-btn sm" title="Shuffle"></button>
             <button id="p-prev" class="icon-btn" title="Previous"></button>
+            <button id="p-back10" class="icon-btn skip-btn" title="Back 10 seconds"></button>
             <button id="p-play" class="play-btn" title="Play / pause"></button>
+            <button id="p-fwd10" class="icon-btn skip-btn" title="Forward 10 seconds"></button>
             <button id="p-next" class="icon-btn" title="Next"></button>
             <button id="p-repeat" class="icon-btn sm" title="Repeat"></button>
           </div>

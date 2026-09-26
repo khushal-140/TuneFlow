@@ -12,6 +12,7 @@ Flask + SQLAlchemy + SQLite on the backend, vanilla HTML/CSS/JS on the frontend,
 | **Playlists / likes / history** | Create & reorder playlists, heart songs, and every play is logged and shown in History |
 | **Smart upload** | Drop an audio file — Mutagen extracts title / artist / album / genre / duration **and embedded cover art**; edit anything before saving |
 | **Smart link import** | YouTube & SoundCloud links play through their **official embeds** (nothing is downloaded or pirated); direct audio URLs are downloaded only after you confirm you have the rights |
+| **MP3 Converter** | Paste a YouTube URL → yt-dlp + ffmpeg convert it to a 192 kbps MP3 on your server (tags + cover art embedded), added straight to your library with a "YT MP3" badge and a **Downloaded from YouTube** section. Gated behind an explicit rights confirmation. Requires `ffmpeg` on PATH. |
 | **AI assistant** | Chat like "make me a 30-minute study playlist" — a rule-based NLU parses moods, activities, durations and artists and searches **only your library**. No external AI APIs. |
 | **Recommendation engine** | Content-based: builds a taste vector from likes (weight 3), plays (weight 1, capped) and playlist adds (weight 0.5) over genre/artist components, then ranks unseen tracks by **cosine similarity** — with a human-readable "because you like…" reason |
 
@@ -95,6 +96,7 @@ TuneFlow/
 │   ├── ai.py               # /api/assistant*
 │   ├── metadata.py         # Mutagen extraction
 │   ├── links.py            # YouTube / SoundCloud / direct-audio logic
+│   ├── converter.py        # YouTube → MP3 jobs (yt-dlp + ffmpeg)
 │   ├── nlu.py              # assistant language parsing
 │   └── recommender.py      # cosine-similarity engine
 ├── templates/index.html    # SPA shell
@@ -116,6 +118,8 @@ GET  /api/likes                               GET /api/history
 GET/POST /api/playlists                       GET|PATCH|DELETE /api/playlists/<id>
 POST /api/playlists/<id>/songs                DELETE /api/playlists/<id>/songs/<sid>
 POST /api/upload                              POST /api/import/preview | confirm
+POST /api/convert/preview                     POST /api/convert/start
+GET  /api/convert/status/<job>                GET  /api/songs?source=ytdownload
 GET  /api/recommendations                     POST /api/assistant
 GET  /api/home                                GET /api/health
 ```

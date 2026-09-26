@@ -116,13 +116,13 @@ export function closeMenu() {
   if (popKey) { document.removeEventListener('keydown', popKey); popKey = null; }
 }
 
-export function openMenu(anchor, items) {
+export function openMenu(anchor, items, { header = '' } = {}) {
   closeMenu();
   const root = document.getElementById('popover-root');
   popEl = document.createElement('div');
   popEl.className = 'popover';
-  popEl.innerHTML = items.map((it, i) =>
-    `<button class="pop-item${it.danger ? ' danger' : ''}" data-i="${i}">${it.icon || ''}<span>${esc(it.label)}</span></button>`).join('');
+  popEl.innerHTML = `${header}${items.map((it, i) =>
+    `<button class="pop-item${it.danger ? ' danger' : ''}" data-i="${i}">${it.icon || ''}<span>${esc(it.label)}</span></button>`).join('')}`;
   root.appendChild(popEl);
   const rect = anchor.getBoundingClientRect();
   const pw = 230;

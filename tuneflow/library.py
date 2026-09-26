@@ -39,11 +39,14 @@ def list_songs(user):
     q = (request.args.get('q') or '').strip()
     genre = (request.args.get('genre') or '').strip()
     artist = (request.args.get('artist') or '').strip()
+    source = (request.args.get('source') or '').strip()
     sort = request.args.get('sort') or 'created_at'
     order = request.args.get('order') or ('asc' if sort in ('title', 'artist', 'album', 'genre') else 'desc')
     liked_only = request.args.get('liked') == '1'
 
     query = Song.query.filter_by(user_id=user.id)
+    if source:
+        query = query.filter(Song.source == source)
     if q:
         like = f'%{q}%'
         query = query.filter(

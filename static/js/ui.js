@@ -9,7 +9,7 @@ export function coverHtml(song, cls = '') {
   return `<div class="cover ${cls} cover-grad" style="background:${gradientFor((song.title || '') + song.id)}"><span>${esc(initials(song.title))}</span></div>`;
 }
 
-const SOURCE_LABEL = { upload: 'File', download: 'Download', youtube: 'YouTube', soundcloud: 'SoundCloud' };
+const SOURCE_LABEL = { upload: 'File', download: 'Download', youtube: 'YouTube', soundcloud: 'SoundCloud', ytdownload: 'YT MP3' };
 
 export function sourceBadge(song) {
   if (song.source === 'upload') return '';
