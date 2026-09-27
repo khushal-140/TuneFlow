@@ -1,6 +1,7 @@
 /* App bootstrap: auth state, chrome (sidebar/topbar), route registration. */
 import { api } from './api.js';
-import { esc, toast, openMenu } from './util.js';
+import { esc, toast, openMenu, debounce } from './util.js';
+import { coverHtml } from './ui.js';
 import { I } from './icons.js';
 import { register, render } from './router.js';
 import { Player } from './player.js';
@@ -106,7 +107,7 @@ function renderTopbar() {
   const tb = document.getElementById('topbar');
   tb.innerHTML = `
     <button id="sb-toggle" class="icon-btn only-mobile">${I.menu}</button>
-    <div class="search-box top">${I.search}<input id="global-q" type="search" placeholder="Search your library…"></div>
+    <div class="search-box top suggest-wrap">${I.search}<input id="global-q" type="search" placeholder="Search your library…" autocomplete="off"><div id="search-suggest" class="suggest-pop hidden"></div></div>
     <div class="top-right">
       <button id="theme-toggle" class="icon-btn" title="Switch theme"></button>
       <span class="chip tiny-chip">${I.shield}<span>Self-hosted</span></span>
@@ -126,11 +127,100 @@ function renderTopbar() {
     syncThemeBtn();
     toast(light ? 'Light mode on' : 'Dark mode on');
   };
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      const q = input.value.trim();
-      location.hash = q ? `#/library?q=${encodeURIComponent(q)}` : '#/library';
+  /* --- live search suggestions --- */
+  const box = tb.querySelector('.search-box.top');
+  const pop = tb.querySelector('#search-suggest');
+  let suggList = [];
+  let suggActive = -1;
+  let suggToken = 0;
+
+  const closeSuggest = () => {
+    pop.classList.add('hidden');
+    pop.innerHTML = '';
+    suggActive = -1;
+    suggList = [];
+  };
+
+  const goLibrary = () => {
+    const q = input.value.trim();
+    location.hash = q ? `#/library?q=${encodeURIComponent(q)}` : '#/library';
+    closeSuggest();
+  };
+
+  const pick = (i) => {
+    const s = suggList[i];
+    if (!s) return;
+    const queue = suggList.slice(); // snapshot before closeSuggest clears the list
+    closeSuggest();
+    Player.play(queue, s.id);
+    toast(`Playing "${s.title}"`);
+  };
+
+  const hl = (text, q) => {
+    const t = String(text || '');
+    const idx = t.toLowerCase().indexOf(q.toLowerCase());
+    if (idx < 0) return esc(t);
+    return esc(t.slice(0, idx)) + '<span class="sg-hl">' + esc(t.slice(idx, idx + q.length)) + '</span>' + esc(t.slice(idx + q.length));
+  };
+
+  const runSuggest = debounce(async () => {
+    const q = input.value.trim();
+    const token = ++suggToken;
+    if (q.length < 2) { closeSuggest(); return; }
+    let suggestions = [];
+    try {
+      ({ suggestions } = await api(`/api/songs/suggest?q=${encodeURIComponent(q)}&limit=7`));
+    } catch { closeSuggest(); return; }
+    if (token !== suggToken) return; // a newer keystroke already answered
+    suggList = suggestions;
+    if (!suggestions.length) {
+      pop.innerHTML = `<div class="sg-empty">No matches for “${esc(q)}” in your library</div>`;
+      pop.classList.remove('hidden');
+      suggActive = -1;
+      return;
     }
+    pop.innerHTML = suggestions.map((s, i) => `
+      <button class="suggest-item" data-i="${i}">
+        ${coverHtml(s, 'tiny')}
+        <span class="sg-main">
+          <span class="sg-title">${hl(s.title, q)}</span>
+          <span class="sg-sub">${hl(s.artist, q)} <span class="sg-tag">${esc(s.match)}</span></span>
+        </span>
+        <span class="sg-play">${I.play}</span>
+      </button>`).join('')
+      + `<button class="sg-see-all" data-seeall>See all results for “${esc(q)}”</button>`;
+    pop.classList.remove('hidden');
+    suggActive = -1;
+    pop.querySelectorAll('.suggest-item').forEach((b) => { b.onclick = () => pick(+b.dataset.i); });
+    pop.querySelector('[data-seeall]').onclick = goLibrary;
+  }, 170);
+
+  input.addEventListener('input', runSuggest);
+  input.addEventListener('focus', () => { if (input.value.trim().length >= 2 && suggList.length) pop.classList.remove('hidden'); });
+  input.addEventListener('keydown', (e) => {
+    const open = !pop.classList.contains('hidden');
+    if (e.key === 'Escape' && open) { closeSuggest(); return; }
+    if (!open) {
+      if (e.key === 'Enter') goLibrary();
+      return;
+    }
+    const items = pop.querySelectorAll('.suggest-item');
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!items.length) return;
+      suggActive = e.key === 'ArrowDown'
+        ? (suggActive + 1) % items.length
+        : (suggActive - 1 + items.length) % items.length;
+      items.forEach((el, i) => el.classList.toggle('active', i === suggActive));
+      items[suggActive].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (suggActive >= 0 && items[suggActive]) pick(suggActive);
+      else goLibrary();
+    }
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!box.contains(e.target)) closeSuggest();
   });
   tb.querySelector('#sb-toggle').onclick = () => {
     document.getElementById('sidebar').classList.toggle('open');

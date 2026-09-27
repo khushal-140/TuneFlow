@@ -69,6 +69,33 @@ def list_songs(user):
     return jsonify(songs=_songs_payload(songs, liked), total=len(songs))
 
 
+@library_bp.get('/api/songs/suggest')
+@login_required
+def suggest(user):
+    """Live search-as-you-type suggestions for the top bar."""
+    q = (request.args.get('q') or '').strip()
+    limit = min(request.args.get('limit', 7, type=int) or 7, 15)
+    if len(q) < 2:
+        return jsonify(suggestions=[])
+    like = f'%{q}%'
+    ql = q.lower()
+    songs = (Song.query.filter_by(user_id=user.id)
+             .filter((Song.title.ilike(like)) | (Song.artist.ilike(like)) | (Song.album.ilike(like)))
+             .order_by(Song.play_count.desc(), Song.title.asc())
+             .limit(limit).all())
+    liked = _liked_ids(user.id)
+    out = []
+    for s in songs:
+        if ql in (s.title or '').lower():
+            match = 'Title'
+        elif ql in (s.artist or '').lower():
+            match = 'Artist'
+        else:
+            match = 'Album'
+        out.append({**s.to_dict(liked=s.id in liked), 'match': match})
+    return jsonify(suggestions=out)
+
+
 @library_bp.get('/api/songs/facets')
 @login_required
 def facets(user):
