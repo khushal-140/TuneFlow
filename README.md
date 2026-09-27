@@ -128,6 +128,31 @@ GET  /api/home                                GET /api/health
 
 - **Rights**: TuneFlow never ships music. Uploads are your own files; embeds use the
   platforms' official players; direct downloads require an explicit confirmation.
+
+### Using the MP3 Converter on Render (or any cloud host)
+
+YouTube blocks downloads from **datacenter IPs** ("Sign in to confirm you're not a bot") —
+that's YouTube's anti-bot protection, not a TuneFlow bug. On your own PC the converter
+works as-is. To make it work on Render:
+
+1. On your computer, export your YouTube cookies:
+   - easiest: install the **"Get cookies.txt LOCALLY"** browser extension, open
+     [youtube.com](https://youtube.com) while signed in, and export cookies for it, or
+   - `yt-dlp --cookies-from-browser chrome --cookies cookies.txt "https://www.youtube.com"`
+2. Copy the **full content** of `cookies.txt`.
+3. Render dashboard → your service → **Environment** → add:
+   `YT_COOKIES` = (paste the content) → Save changes (this redeploys the service).
+4. Try the converter again — it now authenticates as your browser session.
+
+Check `GET /api/health` on your deployment: `"ffmpeg": true` and `"yt_cookies": true`
+mean the server is ready.
+
+Important:
+- Cookies **are your YouTube login** — keep them in the env var (private), never in the repo.
+- They expire after weeks/months; re-export when the bot-check error returns.
+- ffmpeg must exist on the server: add `apt-get update && apt-get install -y ffmpeg` as a
+  build command (native runtime) or bake it into your Docker image.
+
 - **Dev scripts**: `scripts/smoke_test.py` exercises the whole API end-to-end
   (run it while the server is up: `.venv/Scripts/python scripts/smoke_test.py`).
 - Database lives in `instance/tuneflow.db`; delete it (and `--force` reseed) for a reset.

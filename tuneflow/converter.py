@@ -8,9 +8,14 @@ and added to the requesting user's library with source='ytdownload'.
 
 Rights gate: /api/convert/start refuses to run unless the client explicitly
 sends rights_confirmed=true (the UI shows the confirmation checkbox).
+
+Cloud hosts: YouTube blocks datacenter IPs ("Sign in to confirm you're not a
+bot"). Set the YT_COOKIES env var (Netscape cookies.txt content exported from
+your browser) or YT_COOKIES_FILE (path) and it is passed to yt-dlp.
 """
 import os
 import shutil
+import tempfile
 import threading
 import uuid
 
@@ -28,6 +33,41 @@ JOBS_LOCK = threading.Lock()
 
 FFMPEG_MISSING = ('ffmpeg was not found on this server. Install it and make sure it is on PATH, '
                   'then restart TuneFlow.')
+
+
+def _friendly_error(e):
+    """Translate raw yt-dlp errors into something actionable."""
+    msg = str(e)
+    low = msg.lower()
+    if 'sign in to confirm' in low or 'not a bot' in low:
+        return ('YouTube is blocking this server ("Sign in to confirm you are not a bot"). '
+                'Cloud hosts like Render run on datacenter IPs that YouTube does not trust — '
+                'this is not a TuneFlow bug. Fix: on your own PC export your YouTube cookies '
+                '(browser extension "Get cookies.txt LOCALLY", or yt-dlp --cookies-from-browser), '
+                'then paste the cookies.txt content into the YT_COOKIES environment variable on '
+                'Render and redeploy. On your home PC the converter works without any setup.')
+    if 'ffmpeg' in low:
+        return FFMPEG_MISSING
+    return msg
+
+
+_COOKIES_CACHE = None
+
+
+def _cookie_file():
+    """Resolve a cookies.txt for yt-dlp from the environment. Cached per process."""
+    global _COOKIES_CACHE
+    if _COOKIES_CACHE is not None:
+        return _COOKIES_CACHE or None
+    path = os.environ.get('YT_COOKIES_FILE', '').strip()
+    if not path:
+        raw = os.environ.get('YT_COOKIES', '').strip()
+        if raw:
+            fd, path = tempfile.mkstemp(prefix='tf-yt-cookies-', suffix='.txt')
+            with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+                fh.write(raw.replace('\\r\\n', '\n').replace('\\n', '\n'))
+    _COOKIES_CACHE = path if path and os.path.exists(path) else ''
+    return _COOKIES_CACHE or None
 
 
 def _set_job(job_id, **fields):
@@ -59,7 +99,7 @@ def _check_ffmpeg():
 
 
 def _ydl_options(upload_dir, stem, job_id):
-    return {
+    options = {
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(upload_dir, stem + '.%(ext)s'),
         'noplaylist': True,
@@ -74,6 +114,10 @@ def _ydl_options(upload_dir, stem, job_id):
             {'key': 'EmbedThumbnail'},
         ],
     }
+    cookies = _cookie_file()
+    if cookies:
+        options['cookiefile'] = cookies
+    return options
 
 
 @converter_bp.post('/api/convert/preview')
@@ -89,11 +133,14 @@ def preview(user):
         return bad_request(FFMPEG_MISSING)
 
     opts = {'quiet': True, 'no_warnings': True, 'noplaylist': True, 'skip_download': True}
+    cookies = _cookie_file()
+    if cookies:
+        opts['cookiefile'] = cookies
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as e:
-        return bad_request(f'Could not read that video: {e}')
+        return bad_request(f'Could not read that video: {_friendly_error(e)}')
 
     if info.get('_type') in ('playlist', 'multi_video') and info.get('entries'):
         entries = list(info['entries'])
@@ -244,4 +291,4 @@ def _run_conversion(app, user_id, job_id, url, overrides):
 
             _set_job(job_id, percentage=100, stage='Complete', done=True, song_id=song.id)
         except Exception as e:
-            _set_job(job_id, stage='Failed', done=True, error=str(e))
+            _set_job(job_id, stage='Failed', done=True, error=_friendly_error(e))
