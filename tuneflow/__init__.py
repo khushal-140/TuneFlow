@@ -59,9 +59,10 @@ def create_app():
     @app.get('/api/health')
     def health():
         import shutil
+        from .converter import _cookie_file
         return jsonify(ok=True, app='TuneFlow',
                        ffmpeg=shutil.which('ffmpeg') is not None,
-                       yt_cookies=bool(os.environ.get('YT_COOKIES') or os.environ.get('YT_COOKIES_FILE')))
+                       yt_cookies=bool(_cookie_file()))
 
     @app.errorhandler(404)
     def not_found(_e):

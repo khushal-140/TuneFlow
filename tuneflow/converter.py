@@ -42,10 +42,10 @@ def _friendly_error(e):
     if 'sign in to confirm' in low or 'not a bot' in low:
         return ('YouTube is blocking this server ("Sign in to confirm you are not a bot"). '
                 'Cloud hosts like Render run on datacenter IPs that YouTube does not trust — '
-                'this is not a TuneFlow bug. Fix: on your own PC export your YouTube cookies '
-                '(browser extension "Get cookies.txt LOCALLY", or yt-dlp --cookies-from-browser), '
-                'then paste the cookies.txt content into the YT_COOKIES environment variable on '
-                'Render and redeploy. On your home PC the converter works without any setup.')
+                'this is not a TuneFlow bug. Fix: click "Configure cookies" above and paste your '
+                'cookies.txt content (export it on youtube.com with the browser extension '
+                '"Get cookies.txt LOCALLY"). Alternatively set the YT_COOKIES environment variable '
+                'on Render. On your home PC the converter works without any setup.')
     if 'ffmpeg' in low:
         return FFMPEG_MISSING
     return msg
@@ -54,8 +54,16 @@ def _friendly_error(e):
 _COOKIES_CACHE = None
 
 
+def _instance_cookie_file():
+    """Path of cookies saved from the UI (instance/cookies.txt)."""
+    try:
+        return os.path.join(current_app.instance_path, 'cookies.txt')
+    except RuntimeError:
+        return None
+
+
 def _cookie_file():
-    """Resolve a cookies.txt for yt-dlp from the environment. Cached per process."""
+    """Resolve a cookies.txt for yt-dlp: env var, env file path, or UI-saved file."""
     global _COOKIES_CACHE
     if _COOKIES_CACHE is not None:
         return _COOKIES_CACHE or None
@@ -66,6 +74,10 @@ def _cookie_file():
             fd, path = tempfile.mkstemp(prefix='tf-yt-cookies-', suffix='.txt')
             with os.fdopen(fd, 'w', encoding='utf-8') as fh:
                 fh.write(raw.replace('\\r\\n', '\n').replace('\\n', '\n'))
+    if not path:
+        inst = _instance_cookie_file()
+        if inst and os.path.exists(inst):
+            path = inst
     _COOKIES_CACHE = path if path and os.path.exists(path) else ''
     return _COOKIES_CACHE or None
 
@@ -118,6 +130,56 @@ def _ydl_options(upload_dir, stem, job_id):
     if cookies:
         options['cookiefile'] = cookies
     return options
+
+
+@converter_bp.get('/api/convert/cookies')
+@login_required
+def cookies_status(user):
+    global _COOKIES_CACHE
+    src = None
+    if os.environ.get('YT_COOKIES_FILE', '').strip():
+        src = 'env-file'
+    elif os.environ.get('YT_COOKIES', '').strip():
+        src = 'env'
+    else:
+        inst = _instance_cookie_file()
+        if inst and os.path.exists(inst):
+            src = 'ui'
+    _COOKIES_CACHE = None  # re-resolve on next use
+    return jsonify(set=src is not None, source=src)
+
+
+@converter_bp.post('/api/convert/cookies')
+@login_required
+def save_cookies(user):
+    """Save cookies.txt pasted from the UI (stored privately on this server)."""
+    global _COOKIES_CACHE
+    data = request.get_json(silent=True) or {}
+    content = (data.get('content') or '').strip()
+    if not content:
+        return bad_request('Paste your cookies.txt content first.')
+    if '# Netscape' not in content and '\t' not in content:
+        return bad_request("That doesn't look like a cookies.txt file. On youtube.com use the "
+                           "'Get cookies.txt LOCALLY' browser extension to export it, then paste "
+                           "the whole file here.")
+    inst_dir = current_app.instance_path
+    os.makedirs(inst_dir, exist_ok=True)
+    with open(os.path.join(inst_dir, 'cookies.txt'), 'w', encoding='utf-8') as fh:
+        fh.write(content if content.endswith('\n') else content + '\n')
+    _COOKIES_CACHE = None  # re-resolve on next use
+    return jsonify(ok=True, set=True, source='ui',
+                   message='Cookies saved — the converter will use them from now on.')
+
+
+@converter_bp.delete('/api/convert/cookies')
+@login_required
+def clear_cookies(user):
+    global _COOKIES_CACHE
+    inst = _instance_cookie_file()
+    if inst and os.path.exists(inst):
+        os.remove(inst)
+    _COOKIES_CACHE = None
+    return jsonify(ok=True, set=False, source=None)
 
 
 @converter_bp.post('/api/convert/preview')

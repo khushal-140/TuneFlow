@@ -1,6 +1,6 @@
 /* MP3 Converter: paste a YouTube URL, convert to MP3 (yt-dlp + ffmpeg) into your library. */
 import { api } from '../api.js';
-import { esc, fmtDur, toast } from '../util.js';
+import { esc, fmtDur, toast, openModal, closeModal } from '../util.js';
 import { I } from '../icons.js';
 import { songCard, emptyState, registerList } from '../ui.js';
 import { Player } from '../player.js';
@@ -18,6 +18,8 @@ export async function viewConverter() {
     <p class="muted lead">Paste a YouTube link and TuneFlow converts it to a 192 kbps MP3 on your own server — tags and cover art embedded — then adds it straight to your library, offline and yours.</p>
 
     <div class="import-note">${I.shield}<span>Only download audio you have the rights to keep — your own uploads, Creative-Commons or licensed content. YouTube's terms restrict downloading other content.</span></div>
+
+    <div id="cv-access" class="cv-access"></div>
 
     <form id="cv-form" class="import-bar">
       <div class="search-box grow">${I.link}<input id="cv-url" type="url" required placeholder="Paste a YouTube video URL"></div>
@@ -40,6 +42,7 @@ export async function viewConverter() {
 
   loadDownloadList(view);
   resumeActiveJob(view, progressEl);
+  renderAccess();
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -52,8 +55,65 @@ export async function viewConverter() {
       renderPreview(previewEl, currentPreview, progressEl);
     } catch (err) {
       previewEl.innerHTML = `<div class="import-note error">${I.x}<span>${esc(err.message)}</span></div>`;
+      if (/not a bot|cookies/i.test(err.message)) {
+        previewEl.insertAdjacentHTML('beforeend',
+          `<div class="cv-fix-row"><button class="btn btn-grad sm" id="cv-fix-cookies">${I.shield}<span>Paste cookies now</span></button></div>`);
+        previewEl.querySelector('#cv-fix-cookies').onclick = openCookieModal;
+      }
     }
   });
+}
+
+function renderAccess() {
+  const el = document.getElementById('cv-access');
+  if (!el) return;
+  api('/api/convert/cookies').then(({ set, source }) => {
+    el.innerHTML = `
+      <div class="cv-access-row">
+        <span class="chip ${set ? 'ok' : 'warn'}">${set ? I.check : I.shield}
+          <span>${set
+            ? (source === 'ui' ? 'YouTube cookies active (saved on this server)' : 'YouTube cookies active (server environment)')
+            : 'No YouTube cookies — cloud servers get blocked by YouTube\u2019s bot check'}</span>
+        </span>
+        <button class="btn btn-ghost sm" id="cv-cookies-btn">${set ? 'Update' : 'Configure'} cookies</button>
+      </div>`;
+    el.querySelector('#cv-cookies-btn').onclick = openCookieModal;
+  }).catch(() => {});
+}
+
+async function openCookieModal() {
+  let st = { set: false };
+  try { st = await api('/api/convert/cookies'); } catch { /* ignore */ }
+  const m = openModal(`
+    <h3 class="modal-title">YouTube cookies</h3>
+    <p class="muted small">Cloud servers (Render) are blocked by YouTube's bot check — your own PC is not.
+    Export your browser's cookies for <b>youtube.com</b> using the free <b>"Get cookies.txt LOCALLY"</b>
+    browser extension, then paste the whole file below. It is stored only on your own server, never sent anywhere else.</p>
+    <textarea id="ck-content" class="cookie-box" placeholder="# Netscape HTTP Cookie File …" spellcheck="false"></textarea>
+    <div class="modal-actions">
+      ${st.set ? '<button class="btn btn-danger sm" data-clear>Remove saved cookies</button>' : ''}
+      <button class="btn btn-ghost" data-x>Cancel</button>
+      <button class="btn btn-grad" data-ok>Save cookies</button>
+    </div>`);
+  m.querySelector('[data-ok]').onclick = async () => {
+    try {
+      const res = await api('/api/convert/cookies', { method: 'POST', body: { content: m.querySelector('#ck-content').value } });
+      closeModal();
+      toast(res.message || 'Cookies saved.');
+      renderAccess();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  const clr = m.querySelector('[data-clear]');
+  if (clr) clr.onclick = async () => {
+    try {
+      await api('/api/convert/cookies', { method: 'DELETE' });
+      closeModal();
+      toast('Cookies removed.');
+      renderAccess();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  m.querySelector('[data-x]').onclick = closeModal;
+  m.querySelector('#ck-content').focus();
 }
 
 function renderPreview(previewEl, p, progressEl) {
