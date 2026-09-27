@@ -124,6 +124,20 @@ GET  /api/recommendations                     POST /api/assistant
 GET  /api/home                                GET /api/health
 ```
 
+## Deploying to Render
+
+The service **must** bind `0.0.0.0` (binding `127.0.0.1` makes Render report
+"No open ports detected" forever). Recommended setup:
+
+- **Build Command**: `pip install -r requirements.txt && apt-get update && apt-get install -y ffmpeg`
+- **Start Command**: `gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --threads 8`
+  (one worker — converter jobs and SQLite live in that process's memory)
+- **Environment**: `YT_COOKIES` (see the converter section below), optionally `SECRET_KEY`
+
+> **Free-tier warning**: Render's disk is ephemeral — every deploy/restart wipes
+> `instance/tuneflow.db` (accounts, library, history) and uploaded files. For persistent
+> storage you need Render's paid persistent disk or your own server.
+
 ## Notes
 
 - **Rights**: TuneFlow never ships music. Uploads are your own files; embeds use the
