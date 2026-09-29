@@ -82,10 +82,9 @@ def create_app():
 
     @app.get('/api/health')
     def health():
-        import shutil
-        from .converter import _cookie_file
+        from .converter import _cookie_file, _ffmpeg_binary
         return jsonify(ok=True, app='TuneFlow',
-                       ffmpeg=shutil.which('ffmpeg') is not None,
+                       ffmpeg=bool(_ffmpeg_binary()),
                        yt_cookies=bool(_cookie_file()))
 
     @app.errorhandler(404)

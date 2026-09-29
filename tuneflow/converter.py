@@ -31,8 +31,23 @@ converter_bp = Blueprint('converter', __name__)
 JOBS = {}
 JOBS_LOCK = threading.Lock()
 
-FFMPEG_MISSING = ('ffmpeg was not found on this server. Install it and make sure it is on PATH, '
-                  'then restart TuneFlow.')
+FFMPEG_MISSING = ('ffmpeg was not found on this server. The build command downloads a static '
+                  'binary into bin/ automatically ("curl -fsSL .../ffmpeg-linux-x64 -o bin/ffmpeg") '
+                  '— or install ffmpeg system-wide and restart TuneFlow.')
+
+
+def _ffmpeg_binary():
+    """Locate ffmpeg for yt-dlp: FFMPEG_PATH env, repo bin/ (Render build), or PATH."""
+    p = os.environ.get('FFMPEG_PATH', '').strip()
+    if p and (os.path.isfile(p) or os.path.isdir(p)):
+        return p
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    bdir = os.path.join(root, 'bin')
+    if os.path.isdir(bdir) and os.access(bdir, os.X_OK):
+        if any(os.path.isfile(os.path.join(bdir, n)) for n in ('ffmpeg', 'ffmpeg.exe')):
+            return bdir  # yt-dlp finds ffmpeg/ffprobe inside this directory
+    which = shutil.which('ffmpeg')
+    return which or None
 
 
 def _friendly_error(e):
@@ -107,7 +122,7 @@ def _hook(job_id):
 
 
 def _check_ffmpeg():
-    return shutil.which('ffmpeg') is not None
+    return _ffmpeg_binary() is not None
 
 
 def _ydl_options(upload_dir, stem, job_id):
@@ -129,6 +144,9 @@ def _ydl_options(upload_dir, stem, job_id):
     cookies = _cookie_file()
     if cookies:
         options['cookiefile'] = cookies
+    ffmpeg = _ffmpeg_binary()
+    if ffmpeg:
+        options['ffmpeg_location'] = ffmpeg
     return options
 
 

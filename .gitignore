@@ -12,3 +12,6 @@ static/covers/
 # OS / editor noise
 .DS_Store
 Thumbs.db
+
+# static ffmpeg binaries downloaded by the Render build command
+bin/

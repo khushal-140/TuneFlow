@@ -129,7 +129,10 @@ GET  /api/home                                GET /api/health
 The service **must** bind `0.0.0.0` (binding `127.0.0.1` makes Render report
 "No open ports detected" forever). Recommended setup:
 
-- **Build Command**: `pip install -r requirements.txt && apt-get update && apt-get install -y ffmpeg`
+- **Build Command** (downloads a static ffmpeg — apt is read-only on Render's native runtime):
+  ```
+  pip install -r requirements.txt && mkdir -p bin && curl -fsSL https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-linux-x64 -o bin/ffmpeg && curl -fsSL https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffprobe-linux-x64 -o bin/ffprobe && chmod +x bin/ffmpeg bin/ffprobe
+  ```
 - **Start Command**: `gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --threads 8`
   (one worker — converter jobs and SQLite live in that process's memory)
 - **Environment**: `YT_COOKIES` (see the converter section below), optionally `SECRET_KEY`
@@ -164,8 +167,8 @@ mean the server is ready.
 Important:
 - Cookies **are your YouTube login** — keep them in the env var (private), never in the repo.
 - They expire after weeks/months; re-export when the bot-check error returns.
-- ffmpeg must exist on the server: add `apt-get update && apt-get install -y ffmpeg` as a
-  build command (native runtime) or bake it into your Docker image.
+- ffmpeg must exist on the server — the build command above downloads a static binary into
+  `bin/`; TuneFlow picks it up automatically (or point `FFMPEG_PATH` at your own install).
 
 - **Dev scripts**: `scripts/smoke_test.py` exercises the whole API end-to-end
   (run it while the server is up: `.venv/Scripts/python scripts/smoke_test.py`).
