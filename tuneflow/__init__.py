@@ -20,17 +20,41 @@ def create_app():
     )
 
     app.config['SECRET_KEY'] = os.environ.get('TUNEFLOW_SECRET_KEY', 'tuneflow-dev-secret-change-me')
-    os.makedirs(app.instance_path, exist_ok=True)
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'tuneflow.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB uploads
     app.config['JSON_SORT_KEYS'] = False
 
-    # Media directories
-    app.config['UPLOAD_DIR'] = os.path.join(app.static_folder, 'uploads')
-    app.config['COVER_DIR'] = os.path.join(app.static_folder, 'covers')
-    for d in (app.config['UPLOAD_DIR'], app.config['COVER_DIR']):
-        os.makedirs(d, exist_ok=True)
+    data_dir = os.environ.get('DATA_DIR', '').strip()
+    if data_dir:
+        # Persistent storage (e.g. a Render disk mounted at /var/data): keep the
+        # database and media there instead of the ephemeral app directory.
+        os.makedirs(data_dir, exist_ok=True)
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(data_dir, 'tuneflow.db')
+        app.config['UPLOAD_DIR'] = os.path.join(data_dir, 'uploads')
+        app.config['COVER_DIR'] = os.path.join(data_dir, 'covers')
+        os.makedirs(app.config['UPLOAD_DIR'], exist_ok=True)
+        os.makedirs(app.config['COVER_DIR'], exist_ok=True)
+        # Keep /static/uploads and /static/covers URLs working by symlinking
+        # them to the persistent locations (works on Linux hosts like Render).
+        for name, target in (('uploads', app.config['UPLOAD_DIR']),
+                             ('covers', app.config['COVER_DIR'])):
+            static_target = os.path.join(app.static_folder, name)
+            try:
+                if os.path.islink(static_target):
+                    os.remove(static_target)
+                elif os.path.isdir(static_target) and not os.listdir(static_target):
+                    os.rmdir(static_target)
+                if not os.path.exists(static_target):
+                    os.symlink(target, static_target)
+            except OSError:
+                pass  # non-fatal (e.g. Windows without symlink privilege)
+    else:
+        os.makedirs(app.instance_path, exist_ok=True)
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'tuneflow.db')
+        app.config['UPLOAD_DIR'] = os.path.join(app.static_folder, 'uploads')
+        app.config['COVER_DIR'] = os.path.join(app.static_folder, 'covers')
+        os.makedirs(app.config['UPLOAD_DIR'], exist_ok=True)
+        os.makedirs(app.config['COVER_DIR'], exist_ok=True)
 
     db.init_app(app)
 

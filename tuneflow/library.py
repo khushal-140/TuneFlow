@@ -4,7 +4,7 @@ import os
 from flask import Blueprint, jsonify, request, send_file
 
 from .extensions import db
-from .helpers import bad_request, iso, login_required
+from .helpers import bad_request, iso, login_required, resolve_media_path
 from .models import Like, PlayHistory, Playlist, Song, playlist_songs
 from .recommender import recommend_for_user
 
@@ -143,12 +143,9 @@ def delete_song(user, song_id):
     db.session.commit()
 
     # Remove media from disk (best effort) for locally-held files.
-    static_dir = os.path.realpath(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static'))
-    for rel in (song.file_path, song.cover_path):
-        if not rel:
-            continue
-        path = os.path.realpath(os.path.join(static_dir, rel))
-        if path.startswith(static_dir + os.sep) and os.path.exists(path):
+    for kind, rel in (('uploads', song.file_path), ('covers', song.cover_path)):
+        path = resolve_media_path(kind, rel)
+        if path and os.path.exists(path):
             try:
                 os.remove(path)
             except OSError:
@@ -191,9 +188,8 @@ def stream(user, song_id):
     song = get_owned_song(user, song_id)
     if song is None or not song.file_path:
         return jsonify(error='Audio not available for this track.'), 404
-    static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static')
-    path = os.path.realpath(os.path.join(static_dir, song.file_path))
-    if not path.startswith(os.path.realpath(static_dir) + os.sep) or not os.path.exists(path):
+    path = resolve_media_path('uploads', song.file_path)
+    if not path or not os.path.exists(path):
         return jsonify(error='Audio file is missing on disk.'), 404
     # conditional=True gives us HTTP Range support so seeking works.
     return send_file(path, conditional=True)
